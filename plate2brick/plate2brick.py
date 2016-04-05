@@ -43,24 +43,24 @@ class DESIDatum:
 		lam[band]=sp.linspace(desi_spec[band][0],desi_spec[band][1],num=desi_spec[band][1]-desi_spec[band][0])
 
 	def __init__(self,row,loglam,flux,ivar):
-		flux=interpolate.interp1d(loglam,flux)
-		ivar=interpolate.interp1d(10**h[1].data.loglam,h[1].data.ivar)
+		flux=interpolate.interp1d(10**loglam,flux)
+		ivar=interpolate.interp1d(10**loglam,ivar)
 
 		self.header=dict()
-		self.header["OBJTYPE"] = row.CLASS[0]
-		self.header["TARGETCAT"] = row.CLASS[0]
-		self.header["TARGETID"] = row.THING_ID[0]
+		self.header["OBJTYPE"] = row["CLASS"]
+		self.header["TARGETCAT"] = row["CLASS"]
+		self.header["TARGETID"] = row["THING_ID"]
 		self.header["TARGET_MASK0"]=0
-		self.header["MAG"] = row.FIBERMAG[0]
+		self.header["MAG"] = row["FIBERMAG"]
 		self.header["FILTER"] = "UGRIZ"
-		self.header["SPECTROID"] = row.THING_ID[0]
+		self.header["SPECTROID"] = row["THING_ID"]
 		self.header["POSITIONER"] = 0
 		self.header["FIBER"] = 0
 		self.header["LAMBDAREF"] = 1215.67
-		self.header["RA_TARGET"] = row.RA[0]
-		self.header["DEC_TARGET"] = row.DEC[0]
-		self.header["RA_OBS"] = row.RA[0]
-		self.header["DEC_OBS"] = row.DEC[0]
+		self.header["RA_TARGET"] = row["RA"]
+		self.header["DEC_TARGET"] = row["DEC"]
+		self.header["RA_OBS"] = row["RA"]
+		self.header["DEC_OBS"] = row["DEC"]
 		self.header["X_TARGET"] = 0
 		self.header["Y_TARGET"] = 0
 		self.header["X_FVCOBS"] = 0
@@ -85,32 +85,36 @@ class DESIData:
 
 	def __init__(self,spall,plate_dir,plate):
 
-		sp = fits.open(spall)
+		spa = fits.open(spall)
 		fi=glob.glob(plate_dir+"/spPlate-"+str(plate)+"*.fits")
 		spPlate=fits.open(fi[0])
 		
-		w_elg = (sp[1].data.PLATE==plate) & (sp[1].data.CLASS=='GALAXY') & (sp[1].data.ZWARNING_NOQSO==0)
+		w_0 = (spa[1].data.PLATE==plate) & (spa[1].data.CLASS=='GALAXY') & (spa[1].data.ZWARNING_NOQSO==0)  
 		bt1=40+sp.arange(3)
+
+		w_elg = sp.zeros(len(spa[1].data.PLATE),dtype=bool)
+		
 		for b in bt1:
-			w_elg = w_elg | ((sp[1].data.EBOSS_TARGET1 & b) == 1)
+			w_elg = w_elg | (w_0 & ((spa[1].data.EBOSS_TARGET1 & b) > 0))
 
 		bt2=40+sp.arange(8)
+
+
 		for b in bt2:
-			w_elg = w_elg | ((sp[1].data.EBOSS_TARGET2 & b) == 1)
-
+			w_elg = w_elg | (w_0 & ((spa[1].data.EBOSS_TARGET2 & b) > 0))
 			
-		print "found: ",len(sp[1].data.FIBERID[w_elg])," elgs in plate ",plate
+		print "found: ",len(spa[1].data.FIBERID[w_elg])," elgs in plate ",plate
 
-		data=[]
+		self.data=[]
 
-		for row in sp[1].data[w_elg]:
+		for row in spa[1].data[w_elg]:
 			fid=row["FIBERID"]
 			flux=spPlate[0].data[fid-1,:]
 			ivar=spPlate[1].data[fid-1,:]
 			c0=spPlate[0].header["COEFF0"]
 			c1=spPlate[0].header["COEFF1"]
 			loglam=c0+c1*sp.arange(len(flux))
-			data.append(DESIDatum(row,loglam,flux,ivar))
+			self.data.append(DESIDatum(row,loglam,flux,ivar))
 
 
 	@staticmethod
