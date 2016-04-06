@@ -36,6 +36,8 @@ col_type["X_FVCERR"]	= "E"		##	float32
 col_type["NIGHT"]	= "int32"	##	int32	 	 
 col_type["EXPID"]	= "int32"	##	int32	 	 
 col_type["INDEX"]	= "int32"	##	int32
+col_type["EBOSS_CLASS"]	= "50A"		##	int32
+col_type["EBOSS_Z"]	= "E"		##	int32
 
 class DESIDatum:
 	lam=dict()
@@ -70,6 +72,8 @@ class DESIDatum:
 		self.header["NIGHT"] = 0
 		self.header["EXPID"] = 0
 		self.header["INDEX"] = 0
+		self.header["EBOSS_CLASS"]=row["CLASS"]
+		self.header["EBOSS_Z"]=row["Z"]
 
 		self.fl=dict()
 		self.iv=dict()
@@ -116,6 +120,8 @@ class DESIData:
 			loglam=c0+c1*sp.arange(len(flux))
 			self.data.append(DESIDatum(row,loglam,flux,ivar))
 
+		spa.close()
+		spPlate.close()
 
 	@staticmethod
 	def export(data,sufix=None):
@@ -131,7 +137,7 @@ class DESIData:
 
 			hdu0=fits.PrimaryHDU(fl)
 			hdu1=fits.ImageHDU(iv)
-			hdu2=fits.ImageHDU(DESIData.lam[band])
+			hdu2=fits.ImageHDU(DESIDatum.lam[band])
 			hdu3=fits.ImageHDU(re)
 			hdu0.update_ext_name("FLUX")
 			hdu1.update_ext_name("IVAR")
