@@ -1,4 +1,5 @@
 import scipy as sp
+from scipy import random
 from astropy.io import fits
 import glob
 import sys
@@ -10,18 +11,19 @@ desi_spec["b"]=(3600,5930)
 desi_spec["r"]=(5660,7720)
 desi_spec["z"]=(7470,9800)
 
+
 ndiag=11
 
 col_type=dict()
 col_type["OBJTYPE"]  	= "10A" 	##	char[10]	 	 
 col_type["TARGETCAT"]	= "20A"		##	char[20]	 	 
-col_type["TARGETID"] 	= "int64"	##	int64	 	 
-col_type["TARGET_MASK0"]= "int64" 	##	int64
+col_type["TARGETID"] 	= "K"		##	int64	 	 
+col_type["TARGET_MASK0"]= "K" 		##	int64
 col_type["MAG"]		= "5E"		##	float32[5]	 	 
 col_type["FILTER"]	= "50A"		##	char[50]	 	 
-col_type["SPECTROID"]	= "int64"	##	int64	 	 
-col_type["POSITIONER"]	= "int64"	##	int64	 	 
-col_type["FIBER"]	= "int32"	##	int32	 	 
+col_type["SPECTROID"]	= "K"		##	int64	 	 
+col_type["POSITIONER"]	= "K"		##	int64	 	 
+col_type["FIBER"]	= "J"		##	int32	 	 
 col_type["LAMBDAREF"]	= "E"		##	float32	 	 
 col_type["RA_TARGET"]	= "D"		##	float64	 	 
 col_type["DEC_TARGET"]	= "D"		##	float64	 	 
@@ -33,20 +35,47 @@ col_type["X_FVCOBS"]	= "D"		##	float64
 col_type["Y_FVCOBS"]	= "D"		##	float64	 	 
 col_type["Y_FVCERR"]	= "E"		##	float32	 	 
 col_type["X_FVCERR"]	= "E"		##	float32	 	 
-col_type["NIGHT"]	= "int32"	##	int32	 	 
-col_type["EXPID"]	= "int32"	##	int32	 	 
-col_type["INDEX"]	= "int32"	##	int32
+col_type["NIGHT"]	= "J"		##	int32	 	 
+col_type["EXPID"]	= "J"		##	int32	 	 
+col_type["INDEX"]	= "J"		##	int32
 col_type["EBOSS_CLASS"]	= "50A"		##	int32
 col_type["EBOSS_Z"]	= "E"		##	int32
 
+def edge(l,l0,l1,typ,sigma=4):
+	eff=l*0+1
+	if typ=="blue":
+		w=l<l1
+		eff[w]-=sp.exp(-(l[w]-l0)**2/2*sigma**2/(l1-l0)**2)
+	elif typ=="red":
+		w=l>l0
+		eff[w]=sp.exp(-(l[w]-l0)**2/2*sigma**2/(l1-l0)**2)
+
+	return eff
+
 class DESIDatum:
+	lmin=3599.
+	lmax=1000.
+	l=sp.linspace(lmin,deslmax,lmin-lmax)
 	lam=dict()
 	for band in desi_spec:
-		lam[band]=sp.linspace(desi_spec[band][0],desi_spec[band][1],num=desi_spec[band][1]-desi_spec[band][0])
+		w=(l>desi_spec[band][0]) & (l<desi_spec[band][1])
+		lam[band]=l[w]
 
-	def __init__(self,row,loglam,flux,ivar):
+	eff=dict()
+	eff["b"]=edge(lam["b"],desi_spec["r"][0],desi_spec["b"][1],"red")
+	eff["r"]=edge(lam["r"],desi_spec["r"][0],desi_spec["b"][1],"blue")*edge(lam["r"],desi_spec["z"][0],desi_spec["r"][1],"red")
+	eff["z"]=edge(lam["z"],desi_spec["z"][0],desi_spec["r"][1],"blue")
+
+	n=sp.random.normal(size=len(l))
+	noise=dict()
+	for (i,band) in enumerate(desi_spec):
+		w=(l>desi_spec[band][0]) & (l<desi_spec[band][1])
+		noise[band]=n[w]*(-1)**i
+
+	def __init__(self,row,loglam,flux,ivar,wdisp):
 		flux=interpolate.interp1d(10**loglam,flux)
 		ivar=interpolate.interp1d(10**loglam,ivar)
+		wdisp=interpolate.interp1d(10**loglam,wdisp)
 
 		self.header=dict()
 		self.header["OBJTYPE"] = row["CLASS"]
@@ -80,10 +109,10 @@ class DESIDatum:
 		self.re=dict()
 
 		for band in desi_spec:
-			self.fl[band]=flux(self.lam[band])
-			self.iv[band]=ivar(self.lam[band])
-			self.re[band]=sp.exp(-(sp.arange(ndiag)-ndiag/2)**2)[:,None]
-			self.re[band]/=sp.sum(self.re[band])
+			self.iv[band]=ivar(self.lam[band])*eff[band]
+			self.fl[band]=flux(self.lam[band])+noise[band]*(1-eff[band])/sp.sqrt(iv[band])
+			self.re[band]=sp.exp(-(sp.arange(ndiag)-ndiag/2)[:,None]**2/2./wdisp(self.lam[band])**2)
+			self.re[band]/=sp.sum(self.re[band],axis=0)
 
 class DESIData:
 
@@ -115,10 +144,17 @@ class DESIData:
 			fid=row["FIBERID"]
 			flux=spPlate[0].data[fid-1,:]
 			ivar=spPlate[1].data[fid-1,:]
+			amask=spPlate[2].data[fid-1,:]
+			#w=amask!=0
+			#ivar[w]=0
+			wdisp=spPlate[4].data[fid-1,:]
+			w=wdisp==0
+			wdisp[w]=100.
 			c0=spPlate[0].header["COEFF0"]
 			c1=spPlate[0].header["COEFF1"]
 			loglam=c0+c1*sp.arange(len(flux))
-			self.data.append(DESIDatum(row,loglam,flux,ivar))
+			dat=DESIDatum(row,loglam,flux,ivar,wdisp)
+			self.data.append(dat)
 
 		spa.close()
 		spPlate.close()
@@ -139,6 +175,7 @@ class DESIData:
 			hdu1=fits.ImageHDU(iv)
 			hdu2=fits.ImageHDU(DESIDatum.lam[band])
 			hdu3=fits.ImageHDU(re)
+
 			hdu0.update_ext_name("FLUX")
 			hdu1.update_ext_name("IVAR")
 			hdu2.update_ext_name("WAVELENGTH")
@@ -147,7 +184,9 @@ class DESIData:
 			cols=[]
 			for key in col_type:
 				a=[]
-				for d in data:
+				for (i,d) in enumerate(data):
+					if key=="INDEX":d.header[key]=i
+					if key=="FILTER":d.header[key]=band.upper()
 					a.append(d.header[key])
 				cols.append(fits.Column(name=key,format=col_type[key],array=a))
 
