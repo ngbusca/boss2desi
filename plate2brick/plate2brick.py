@@ -53,9 +53,9 @@ def edge(l,l0,l1,typ,sigma=4):
 	return eff
 
 class DESIDatum:
-	lmin=3599.
-	lmax=1000.
-	l=sp.linspace(lmin,deslmax,lmin-lmax)
+	lmin=3599
+	lmax=10000
+	l=sp.linspace(lmin,lmax,num=lmax-lmin)
 	lam=dict()
 	for band in desi_spec:
 		w=(l>desi_spec[band][0]) & (l<desi_spec[band][1])
@@ -66,11 +66,6 @@ class DESIDatum:
 	eff["r"]=edge(lam["r"],desi_spec["r"][0],desi_spec["b"][1],"blue")*edge(lam["r"],desi_spec["z"][0],desi_spec["r"][1],"red")
 	eff["z"]=edge(lam["z"],desi_spec["z"][0],desi_spec["r"][1],"blue")
 
-	n=sp.random.normal(size=len(l))
-	noise=dict()
-	for (i,band) in enumerate(desi_spec):
-		w=(l>desi_spec[band][0]) & (l<desi_spec[band][1])
-		noise[band]=n[w]*(-1)**i
 
 	def __init__(self,row,loglam,flux,ivar,wdisp):
 		flux=interpolate.interp1d(10**loglam,flux)
@@ -109,8 +104,9 @@ class DESIDatum:
 		self.re=dict()
 
 		for band in desi_spec:
-			self.iv[band]=ivar(self.lam[band])*eff[band]
-			self.fl[band]=flux(self.lam[band])+noise[band]*(1-eff[band])/sp.sqrt(iv[band])
+			noise=sp.random.normal(size=len(self.lam[band]))
+			self.iv[band]=ivar(self.lam[band])*self.eff[band]
+			self.fl[band]=flux(self.lam[band])+noise*sp.sqrt((1-self.eff[band])/self.iv[band])
 			self.re[band]=sp.exp(-(sp.arange(ndiag)-ndiag/2)[:,None]**2/2./wdisp(self.lam[band])**2)
 			self.re[band]/=sp.sum(self.re[band],axis=0)
 
