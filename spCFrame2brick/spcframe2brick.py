@@ -11,7 +11,6 @@ ndiag=11
 
 boss_bands=["b","r"]
 
-FID_LREF=dict()
 FID_LREF=250
 LMIN_BOSS=3600.
 LMAX_BOSS=10000.
@@ -42,10 +41,10 @@ col_type["EXPID"]	= "J"		##	int32
 col_type["INDEX"]	= "J"		##	int32
 col_type["BOSS_CLASS"]	= "50A"		##	int32
 col_type["BOSS_SUBCLASS"]= "50A"	##	int32
-col_type["BOSS_Z"]	= "E"		##	int32
-col_type["BOSS_PLATE"]	= "E"		##	int32
-col_type["BOSS_MJD"]	= "E"		##	int32
-col_type["BOSS_ZWARNOQSO"]= "E"		##	int32
+col_type["BOSS_Z"]	= "E"		##	float32
+col_type["BOSS_PLATE"]	= "J"		##	int32
+col_type["BOSS_MJD"]	= "J"		##	int32
+col_type["BOSS_ZWARNOQSO"]= "J"		##	int32
 
 class DESIDatum:
 	def __init__(self,row):
