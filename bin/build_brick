@@ -1,0 +1,38 @@
+#!/usr/bin/env python
+
+from spcframe2brick import *
+
+import argparse
+
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+parser.add_argument('-sp','--spall', type = str, default = None, required=True,
+		help = '<spall.fits> name of the spAll file')
+
+parser.add_argument('-d','--dir', type = str, default = None, required=True, nargs='*',
+		help = 'directory(ies) where plate/spcframe files are found')
+
+parser.add_argument('-o','--outdir', type = str, default = None, required=True,
+		help = 'output directory')
+
+parser.add_argument('-p','--plates', type = int, default = None, required=False,nargs='*',
+		                        help = '[list of plates]')
+
+parser.add_argument('-s','--ssample', type = float, default = None, required=False,
+		                        help = '(random) fraction of objects')
+
+
+args = parser.parse_args()
+spa=args.spall
+print spa
+idir = args.dir
+print idir
+odir = args.outdir
+plates=args.plates
+print plates
+ssample=args.ssample
+
+d=brick(spa,idir,plates=plates,ssample=ssample)
+brick.export(d,odir)
+
+
