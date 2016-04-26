@@ -1,16 +1,11 @@
 import scipy as sp
 from scipy import random
 from astropy.io import fits
+import fitsio
 import glob
 import sys
 from scipy import interpolate
 import os
-
-desi_spec=dict()
-desi_spec["b"]=(3600,5930)
-desi_spec["r"]=(5660,7720)
-desi_spec["z"]=(7470,9800)
-
 
 ndiag=11
 
@@ -41,40 +36,11 @@ col_type["INDEX"]	= "J"		##	int32
 col_type["EBOSS_CLASS"]	= "50A"		##	int32
 col_type["EBOSS_Z"]	= "E"		##	int32
 
-def edge(l,l0,l1,typ,sigma=4):
-	eff=l*0+1
-	if typ=="blue":
-		w=l<l1
-		eff[w]-=sp.exp(-(l[w]-l0)**2/2*sigma**2/(l1-l0)**2)
-	elif typ=="red":
-		w=l>l0
-		eff[w]=sp.exp(-(l[w]-l0)**2/2*sigma**2/(l1-l0)**2)
-
-	return eff
-
 class DESIDatum:
-	lmin=3599
-	lmax=10000
-	l=sp.linspace(lmin,lmax,num=lmax-lmin)
-	lam=dict()
-	for band in desi_spec:
-		w=(l>desi_spec[band][0]) & (l<desi_spec[band][1])
-		lam[band]=l[w]
-
-	eff=dict()
-	eff["b"]=edge(lam["b"],desi_spec["r"][0],desi_spec["b"][1],"red")
-	eff["r"]=edge(lam["r"],desi_spec["r"][0],desi_spec["b"][1],"blue")*edge(lam["r"],desi_spec["z"][0],desi_spec["r"][1],"red")
-	eff["z"]=edge(lam["z"],desi_spec["z"][0],desi_spec["r"][1],"blue")
-
-
-	def __init__(self,row,loglam,flux,ivar,wdisp):
-		flux=interpolate.interp1d(10**loglam,flux)
-		ivar=interpolate.interp1d(10**loglam,ivar)
-		wdisp=interpolate.interp1d(10**loglam,wdisp)
-
+	def __init__(self,row):
 		self.header=dict()
 		self.header["OBJTYPE"] = row["CLASS"]
-		self.header["TARGETCAT"] = row["CLASS"]
+		self.header["TARGETCAT"] = row["OBJTYPE"]
 		self.header["TARGETID"] = row["THING_ID"]
 		self.header["TARGET_MASK0"]=0
 		self.header["MAG"] = row["FIBERMAG"]
@@ -96,64 +62,93 @@ class DESIDatum:
 		self.header["NIGHT"] = 0
 		self.header["EXPID"] = 0
 		self.header["INDEX"] = 0
-		self.header["EBOSS_CLASS"]=row["CLASS"]
-		self.header["EBOSS_Z"]=row["Z"]
+		self.header["BOSS_CLASS"]=row["CLASS"]
+		self.header["BOSS_SUBCLASS"]=row["SUBCLASS"]
+		self.header["BOSS_Z"]=row["Z"]
 
 		self.fl=dict()
 		self.iv=dict()
-		self.re=dict()
+		self.wd=dict()
 
-		for band in desi_spec:
-			noise=sp.random.normal(size=len(self.lam[band]))
-			self.iv[band]=ivar(self.lam[band])*self.eff[band]
-			self.fl[band]=flux(self.lam[band])+noise*sp.sqrt((1-self.eff[band])/self.iv[band])
-			self.re[band]=sp.exp(-(sp.arange(ndiag)-ndiag/2)[:,None]**2/2./wdisp(self.lam[band])**2)
-			self.re[band]/=sp.sum(self.re[band],axis=0)
+	def add_band(self,band,exp,lam,ivar,flux,wdisp):
+		band_exp=(band,exp)
+
+		self.iv[band_exp]=interpolate.interp1d(lam,ivar)
+		self.fl[band_exp]=interpolate.interp1d(lam,flux)
+		self.wd[band_exp]=interpolate.interp1d(lam,wdisp)
+
+	def get_resolution(self,band,exp,lam):
+		band_exp = (band,exp)
+		re=sp.exp(-(sp.arange(ndiag)-ndiag/2)[:,None]**2/2./self.wd[band_exp](lam)**2)
+		re/=sp.sum(re,axis=0)
+		return re
 
 class DESIData:
 
-	def __init__(self,spall,plate_dir,plate):
+	def __init__(self,spall,plate_dir,plate=None):
 
 		spa = fits.open(spall)
-		fi=glob.glob(plate_dir+"/spPlate-"+str(plate)+"*.fits")
-		spPlate=fits.open(fi[0])
-		
-		w_0 = (spa[1].data.PLATE==plate) & (spa[1].data.CLASS=='GALAXY') & (spa[1].data.ZWARNING_NOQSO==0)  
-		bt1=40+sp.arange(3)
+		w_0 = (spa[1].data.CLASS=='GALAXY') & (spa[1].data.ZWARNING_NOQSO==0) & (spa[1].data.THING_ID>0)
+		if plate is not None:
+			w_0 = w_0 & (spa[1].data.PLATE==plate)
+		bt1=[61]
 
 		w_elg = sp.zeros(len(spa[1].data.PLATE),dtype=bool)
 		
 		for b in bt1:
-			w_elg = w_elg | (w_0 & ((spa[1].data.EBOSS_TARGET1 & b) > 0))
+			w_elg = w_elg | (w_0 & ((spa[1].data.ANCILLARY_TARGET1 & 2**b) > 0))
 
-		bt2=40+sp.arange(8)
-
+		bt2=[18,34,39]
 
 		for b in bt2:
-			w_elg = w_elg | (w_0 & ((spa[1].data.EBOSS_TARGET2 & b) > 0))
+			w_elg = w_elg | (w_0 & ((spa[1].data.ANCILLARY_TARGET2 & 2**b) > 0))
 			
-		print "found: ",len(spa[1].data.FIBERID[w_elg])," elgs in plate ",plate
+		print "found: ",len(spa[1].data.FIBERID[w_elg])," elgs "
+
+		plates=spa[1].data.PLATE[w_elg]
+		mjds=spa[1].data.MJD[w_elg]
+		rows=spa[1].data[w_elg]
+
+		name_row = dict()
+		
+		count=0
+		for (plate,mjd) in zip(plates,mjds):
+			key = str(plate)+"-"+str(mjd)
+			if not name_row.has_key(key):
+				name_row[key] = []
+
+			name_row[key].append(rows[count])
+			count+=1
+
+		names = [str(plate)+"-"+str(mjd) for (plate,mjd) in zip(plates,mjds)]
+		names = sp.unique(names)
 
 		self.data=[]
 
-		for row in spa[1].data[w_elg]:
-			fid=row["FIBERID"]
-			flux=spPlate[0].data[fid-1,:]
-			ivar=spPlate[1].data[fid-1,:]
-			amask=spPlate[2].data[fid-1,:]
-			#w=amask!=0
-			#ivar[w]=0
-			wdisp=spPlate[4].data[fid-1,:]
-			w=wdisp==0
-			wdisp[w]=100.
-			c0=spPlate[0].header["COEFF0"]
-			c1=spPlate[0].header["COEFF1"]
-			loglam=c0+c1*sp.arange(len(flux))
-			dat=DESIDatum(row,loglam,flux,ivar,wdisp)
-			self.data.append(dat)
+		for name in names:
+			spPlate = fitsio.FITS(plate_dir+"/spPlate-"+name+".fits")
+			print "reading plate "+name," ELGs: ",len(name_row[name])
+
+			for row in name_row[name]:
+				fid = row["FIBERID"]
+				flux=spPlate[0][fid-1,:].flatten()
+				ivar=spPlate[1][fid-1,:].flatten()
+				amask=spPlate[2][fid-1,:].flatten()
+				wdisp=spPlate[4][fid-1,:].flatten()
+				w=(amask!=0) | (wdisp==0)
+				ivar[w]=1e-10
+				wdisp[w]=100.
+				head=spPlate[0].read_header()
+				c0=head["COEFF0"]
+				c1=head["COEFF1"]
+				loglam=c0+c1*sp.arange(len(flux))
+				dat=DESIDatum(row)
+				dat.add_band("coadd",0,10**loglam,ivar,flux,wdisp)
+				self.data.append(dat)
+
+			spPlate.close()
 
 		spa.close()
-		spPlate.close()
 
 	@staticmethod
 	def export(data,sufix=None):

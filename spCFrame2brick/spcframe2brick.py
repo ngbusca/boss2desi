@@ -138,11 +138,15 @@ class DESIDatum:
 
 class DESIData:
 
-	def __init__(self,spall,plate_dir,plates=None):
+	def __init__(self,spall,plate_dir,plates=None,ssample=None):
 
 		spa = fits.open(spall)
 #		w_0 = (spa[1].data.CLASS=='GALAXY') & (spa[1].data.ZWARNING_NOQSO==0) & (spa[1].data.THING_ID > 0)
 		w_0 = spa[1].data.THING_ID > 0
+		if not ssample is None:
+			r=sp.random.uniform(size=len(spa[1].data.THING_ID))
+			w_0 = w_0 & (r<ssample)
+			print "retained: ",len(spa[1].data.THING_ID[w_0])," of ",len(spa[1].data.THING_ID)
 		if not plates is None:
 			w_plates = sp.zeros(len(spa[1].data.PLATE),dtype=bool)
 			for plate in plates:
