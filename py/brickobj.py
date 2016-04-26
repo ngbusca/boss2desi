@@ -101,16 +101,16 @@ class brickobj:
 		i[w]=1
 
 		flux = (la[i]-lam)*fl[i-1]*iv[i-1] + (lam-la[i-1])*fl[i]*iv[i]
-		ivar = (la[i]-lam)*iv[i-1] + (lam-la[i-1])*iv[i]
+		norm = (la[i]-lam)*iv[i-1] + (lam-la[i-1])*iv[i]
+		ivar = norm**2/(iv[i-1]*(la[i]-lam)**2 + iv[i]*(lam-la[i-1])**2)
 
 		w=(iv[i-1]==0) | (iv[i]==0)
-		ivar[w]=0
+		norm[w]=0
 		flux[w]=0
+		ivar[w]=0
 
-		w=ivar>0
-		flux[w]/=ivar[w]
-		ivar/=la[i]-la[i-1]
-
+		w=norm>0
+		flux[w]/=norm[w]
 
 		wdisp=(la[i]-lam)*wd[i-1] + (lam-la[i-1])*wd[i]
 		wdisp/=la[i]-la[i-1]

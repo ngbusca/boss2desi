@@ -59,10 +59,12 @@ class brick:
 		for plate in uplates:
 			fids = [row["FIBERID"] for row in rows if row["PLATE"]==plate]
 			mjds = [row["MJD"] for row in rows if row["PLATE"]==plate]
+
 			for band in boss_bands:
 				cframes = []
 				for di in plate_dir:
 					spcfs=glob.glob(di+"/"+str(plate)+"/spCFrame-"+band+"?-*.fits.gz")
+
 					cframes = sp.concatenate([cframes,glob.glob(di+"/"+str(plate)+"/spCFrame-"+band+"?-*.fits.gz")])
 				for cframe in cframes:
 					print "reading "+cframe
