@@ -102,7 +102,10 @@ class brickobj:
 
 		flux = (la[i]-lam)*fl[i-1]*iv[i-1] + (lam-la[i-1])*fl[i]*iv[i]
 		norm = (la[i]-lam)*iv[i-1] + (lam-la[i-1])*iv[i]
-		ivar = norm**2/(iv[i-1]*(la[i]-lam)**2 + iv[i]*(lam-la[i-1])**2)
+		ivar = norm**2
+		norm_ivar = (iv[i-1]*(la[i]-lam)**2 + iv[i]*(lam-la[i-1])**2)
+		w=norm_ivar>0
+		ivar[w]/=norm_ivar[w]
 
 		w=(iv[i-1]==0) | (iv[i]==0)
 		norm[w]=0
