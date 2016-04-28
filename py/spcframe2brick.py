@@ -65,7 +65,7 @@ class brick:
 				for di in plate_dir:
 					spcfs=glob.glob(di+"/"+str(plate)+"/spCFrame-"+band+"?-*.fits.gz")
 
-					cframes = sp.concatenate([cframes,glob.glob(di+"/"+str(plate)+"/spCFrame-"+band+"?-*.fits.gz")])
+					cframes = sp.concatenate([cframes,glob.glob(di+"/"+str(plate)+"/spCFrame-"+band+"?-*.fits*")])
 				for cframe in cframes:
 					print "reading "+cframe
 					h=fitsio.FITS(cframe)
