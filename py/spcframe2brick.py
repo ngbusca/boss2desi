@@ -10,39 +10,9 @@ from brickobj import *
 
 class brick:
 
-	def __init__(self,spall,plate_dir,plates=None,ssample=None):
+	def __init__(self,rows,plate_dir):
 
-		spa = fits.open(spall)
-		w_0 = spa[1].data.THING_ID > 0
-		if not ssample is None:
-			r=sp.random.uniform(size=len(spa[1].data.THING_ID))
-			w_0 = w_0 & (r<ssample)
-			print "retained: ",len(spa[1].data.THING_ID[w_0])," of ",len(spa[1].data.THING_ID)
-		if not plates is None:
-			w_plates = sp.zeros(len(spa[1].data.PLATE),dtype=bool)
-			for plate in plates:
-				w_plates = w_plates | (spa[1].data.PLATE==plate)
-			w_0 = w_0 & w_plates
-
-		bt1=[61]
-
-		w_elg = sp.zeros(len(spa[1].data.PLATE),dtype=bool)
-		
-		for b in bt1:
-			w_elg = w_elg | (w_0 & ((spa[1].data.ANCILLARY_TARGET1 & 2**b) > 0))
-
-		bt2=[18,34,39]
-
-		for b in bt2:
-			w_elg = w_elg | (w_0 & ((spa[1].data.ANCILLARY_TARGET2 & 2**b) > 0))
-			
-		print "found: ",len(spa[1].data.FIBERID[w_elg])," elgs "
-
-		rows=spa[1].data[w_elg]
-		if plates is None:
-			plates = spa[1].data.PLATE[w_elg]
-
-
+		plates = [row["PLATE"] for row in rows]
 		self.plates = plates
 
 		self.data = dict()
@@ -95,7 +65,6 @@ class brick:
 
 					h.close()
 
-		spa.close()
 
 	@staticmethod
 	def export(data,dirout="./"):
