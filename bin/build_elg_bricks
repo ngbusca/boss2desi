@@ -1,0 +1,71 @@
+#!/usr/bin/env python
+
+from spcframe2brick import *
+
+import argparse
+
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+parser.add_argument('-sp','--spall', type = str, default = None, required=True,
+		help = '<spall.fits> name of the spAll file')
+
+parser.add_argument('-d','--dir', type = str, default = None, required=True, nargs='*',
+		help = 'directory(ies) where plate/spcframe files are found')
+
+parser.add_argument('-o','--outdir', type = str, default = None, required=True,
+		help = 'output directory')
+
+parser.add_argument('-p','--plates', type = int, default = None, required=False,nargs='*',
+		                        help = '[list of plates]')
+
+parser.add_argument('-s','--ssample', type = float, default = None, required=False,
+		                        help = '(random) fraction of objects')
+
+
+args = parser.parse_args()
+print "reading spAll from: ",args.spall
+idir = args.dir
+print "reading plates from: ",idir
+odir = args.outdir
+plates=args.plates
+print "exporting to plates: ",plates
+ssample=args.ssample
+
+spa = fits.open(args.spall)
+w_0 = spa[1].data.THING_ID > 0
+if not ssample is None:
+	r=sp.random.uniform(size=len(spa[1].data.THING_ID))
+	w_0 = w_0 & (r<ssample)
+	print "retained: ",len(spa[1].data.THING_ID[w_0])," of ",len(spa[1].data.THING_ID)
+
+if plates != None:
+	w_plates = sp.zeros(len(w_0),dtype=bool)
+	for p in plates:
+		w_plates = w_plates | (spa[1].data.PLATE == p)
+
+	w_0 = w_0 & w_plates
+	
+
+bt1=[61]
+w_elg = sp.zeros(len(spa[1].data.PLATE),dtype=bool)
+		
+for b in bt1:
+	w_elg = w_elg | (w_0 & ((spa[1].data.ANCILLARY_TARGET1 & 2**b) > 0))
+
+bt2=[18,34,39]
+
+for b in bt2:
+	w_elg = w_elg | (w_0 & ((spa[1].data.ANCILLARY_TARGET2 & 2**b) > 0))
+			
+
+
+print "found: ",len(spa[1].data.FIBERID[w_elg])," elgs "
+
+rows=spa[1].data[w_elg]
+
+
+
+
+
+d=brick(rows,idir)
+brick.export(d,odir)

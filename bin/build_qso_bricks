@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+
+from spcframe2brick import *
+
+import argparse
+
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+parser.add_argument('-sp','--spall', type = str, default = None, required=True,
+		help = '<spall.fits> name of the spAll file')
+
+parser.add_argument('-d','--dir', type = str, default = None, required=True, nargs='*',
+		help = 'directory(ies) where plate/spcframe files are found')
+
+parser.add_argument('-o','--outdir', type = str, default = None, required=True,
+		help = 'output directory')
+
+parser.add_argument('-p','--plates', type = int, default = None, required=False,nargs='*',
+		                        help = '[list of plates]')
+
+parser.add_argument('-s','--ssample', type = float, default = None, required=False,
+		                        help = '(random) fraction of objects')
+
+parser.add_argument('-v','--vac',type=str,required=False,
+		help = 'visual vac')
+
+args = parser.parse_args()
+print "reading spAll from: ",args.spall
+idir = args.dir
+print "reading plates from: ",idir
+odir = args.outdir
+plates=args.plates
+print "exporting to plates: ",plates
+ssample=args.ssample
+
+spa = fits.open(args.spall)
+w_0 = spa[1].data.THING_ID > 0
+if not ssample is None:
+	r=sp.random.uniform(size=len(spa[1].data.THING_ID))
+	w_0 = w_0 & (r<ssample)
+	print "retained: ",len(spa[1].data.THING_ID[w_0])," of ",len(spa[1].data.THING_ID)
+
+if plates != None:
+	w_plates = sp.zeros(len(w_0),dtype=bool)
+	for p in plates:
+		w_plates = w_plates | (spa[1].data.PLATE == p)
+
+	w_0 = w_0 & w_plates
+	
+
+bt1=[10,11,12,13,14,15,16,17,18,19,40,41,42,43,44]
+w_elg = sp.zeros(len(spa[1].data.PLATE),dtype=bool)
+		
+for b in bt1:
+	w_elg = w_elg | (w_0 & ((spa[1].data.BOSS_TARGET1 & 2**b) > 0))
+
+print "found: ",len(sp.unique(spa[1].data.THING_ID[w_elg]))," qsos "
+
+rows=spa[1].data[w_elg]
+
+
+if args.vac!=None:
+	vac = fits.open(args.vac)
+	ztrue=dict()
+	for row in vac[1].data:
+		ztrue[row["THING_ID"]]=row["Z_VI"]
+	f=open(odir+"/truth_table.dat","w")
+
+	for row in rows:
+		thid = row["THING_ID"]
+		if ztrue.has_key(thid):
+			f.write(str(thid)+" "+str(ztrue[thid])+"\n")
+
+	f.close()
+
+d=brick(rows,idir)
+brick.export(d,odir)
