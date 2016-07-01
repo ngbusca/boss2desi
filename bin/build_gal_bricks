@@ -2,6 +2,7 @@
 
 from spcframe2brick import *
 
+import scipy as sp
 import argparse
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -21,8 +22,14 @@ parser.add_argument('-p','--plates', type = int, default = None, required=False,
 parser.add_argument('-s','--ssample', type = float, default = None, required=False,
 		                        help = '(random) fraction of objects')
 
-parser.add_argument('-v','--vac',type=str,required=False,
-		help = 'visual vac')
+parser.add_argument('--regroup', type = int, default = None, required=False,
+		                        help = 'regroup objects into files of at moset <regroup> objects')
+
+parser.add_argument('--rand-mjd',action='store_true',default=False,
+		help='for each object, choose a random mjd from all the available')
+
+parser.add_argument('--truth-files',type=str,default=None,required=False,nargs='*',
+		help='list of truth files (assuming redmonster output format)')
 
 parser.add_argument('--mask',action='store_true',default=False,
 		help = 'mask plate, thing_id and other boss info')
@@ -51,29 +58,44 @@ if plates != None:
 	w_0 = w_0 & w_plates
 	
 
-bt1=[10,11,12,13,14,15,16,17,18,19,40,41,42,43,44]
-w_qso = sp.zeros(len(spa[1].data.PLATE),dtype=bool)
+bt1=[0,1,2,3,6,7,8]
+w_gal = sp.zeros(len(spa[1].data.PLATE),dtype=bool)
 		
 for b in bt1:
-	w_qso = w_qso | (w_0 & ((spa[1].data.BOSS_TARGET1 & 2**b) > 0))
+	w_gal = w_gal | (w_0 & ((spa[1].data.BOSS_TARGET1 & 2**b) > 0))
 
-print "found: ",len(sp.unique(spa[1].data.THING_ID[w_qso]))," qsos "
+print "found: ",len(sp.unique(spa[1].data.THING_ID[w_gal]))," gals "
 
-rows=spa[1].data[w_qso]
+rows=spa[1].data[w_gal]
 
-if args.vac!=None:
-	vac = fits.open(args.vac)
-	ztrue=dict()
-	for row in vac[1].data:
-		ztrue[row["THING_ID"]]=row["Z_VI"]
-	f=open(odir+"/truth_table.dat","w")
+if args.regroup is None:
+	d=brick(rows,idir)
+	brick.export(d,odir)
+else:
+	thids = [row["THING_ID"] for row in rows]
+	thids = sp.unique(thids)
+	nobjs = len(thids)
+	if not args.truth_files is None:
+		tt=dict()
+		for ftruth in args.truth_files:
+			h=fits.open(ftruth)
+			for (tid,z) in zip(h[1].data.TARGETID,h[1].data.Z):
+				tt[tid]=z
 
-	for row in rows:
-		thid = row["THING_ID"]
-		if ztrue.has_key(thid):
-			f.write(str(thid)+" "+str(ztrue[thid])+"\n")
+		f=open(odir+'/truth_table_gal.dat',"w")
+		for tid in thids:
+			f.write(str(tid)+" "+str(tt[tid])+"\n")
+		f.close()
 
-	f.close()
+	for i in range(nobjs/args.regroup + 1):
+		row_thids = []
+		for th in thids[i*args.regroup:(i+1)*args.regroup]:
+			row_aux = [row for row in rows if row["THING_ID"]==th]
+			if args.rand_mjd:
+				row_aux = [row_aux[random.randint(0,len(row_aux)-1)]]
+			for row in row_aux:
+				row_thids.append(row)
 
-d=brick(rows,idir)
-brick.export(d,odir,mask=args.mask)
+
+		d=brick(row_thids,idir)
+		brick.export(d,odir,pext="p"+str(i),mask=args.mask)

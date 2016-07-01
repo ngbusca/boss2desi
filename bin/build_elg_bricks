@@ -22,6 +22,12 @@ parser.add_argument('-s','--ssample', type = float, default = None, required=Fal
 		                        help = '(random) fraction of objects')
 
 
+parser.add_argument('-v','--vac',type=str,required=False,
+		help = 'visual vac')
+
+parser.add_argument('--mask',action='store_true',default=False,
+		help = 'mask plate, thing_id and other boss info')
+
 args = parser.parse_args()
 print "reading spAll from: ",args.spall
 idir = args.dir
@@ -32,7 +38,8 @@ print "exporting to plates: ",plates
 ssample=args.ssample
 
 spa = fits.open(args.spall)
-w_0 = spa[1].data.THING_ID > 0
+w_0 = sp.ones(len(spa[1].data.THING_ID),dtype=bool)
+
 if not ssample is None:
 	r=sp.random.uniform(size=len(spa[1].data.THING_ID))
 	w_0 = w_0 & (r<ssample)
@@ -63,9 +70,28 @@ print "found: ",len(spa[1].data.FIBERID[w_elg])," elgs "
 
 rows=spa[1].data[w_elg]
 
+thing_id_count=1
+for row in rows:
+	if row["THING_ID"]<=0:
+		row["THING_ID"]=thing_id_count
+		thing_id_count+=1
 
+if args.vac!=None:
+	vac = fits.open(args.vac)
+	ztrue=dict()
+	for row in vac[1].data:
+		pmf=str(row["PLATE"])+"-"+str(row["MJD"])+"-"+str(row["FIBERID"])
+		if row["zQ"] >=2 or (row["zQ"]>=1 and row["zCont"]>0) or (row["zQ"]>=0 and row["zCont"]>=2.5):
+			ztrue[pmf]=row["Z"]
+	f=open(odir+"/truth_table_elg.dat","w")
+	for row in rows:
+		thid = row["THING_ID"]
+		pmf=str(row["PLATE"])+"-"+str(row["MJD"])+"-"+str(row["FIBERID"])
+		if ztrue.has_key(pmf):
+			f.write(str(thid)+" "+str(ztrue[pmf])+" "+pmf+"\n")
 
+	f.close()
 
 
 d=brick(rows,idir)
-brick.export(d,odir)
+brick.export(d,odir,mask=args.mask)
